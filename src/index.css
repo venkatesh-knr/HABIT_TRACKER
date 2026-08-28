@@ -1,0 +1,30 @@
+:root {
+  --bg: #f5f6f2;
+  --surface: #ffffff;
+  --text: #22261f;
+  --text-muted: #6b6f63;
+  --border: #dfe1d8;
+  --primary: #3f6c51;
+  --primary-text: #ffffff;
+  --danger: #a1402f;
+
+  font: 16px/145% system-ui, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: light;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
