@@ -2,20 +2,28 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 import type { Habit } from './types';
+import type { LibraryHabit } from './lib/habitLibrary';
 import { AuthScreen } from './screens/AuthScreen';
 import { GetStarted } from './screens/GetStarted';
 import { Today } from './screens/Today';
-import { HabitHistory } from './screens/HabitHistory';
+import { Calendar } from './screens/Calendar';
+import { Stats } from './screens/Stats';
+import { ManageHabits } from './screens/ManageHabits';
+import { HabitLibrary } from './screens/HabitLibrary';
 import { AddEditHabit } from './screens/AddEditHabit';
+import { NavBar } from './components/NavBar';
+import type { Tab } from './components/NavBar';
 import './App.css';
 
-type View = { name: 'today' } | { name: 'addEdit'; habitId: string | null } | { name: 'history'; habitId: string };
+type Overlay = { name: 'addEdit'; habit: Habit | null; prefill?: LibraryHabit | null } | { name: 'library' };
 
 function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [hasEverHadHabit, setHasEverHadHabit] = useState<boolean | null>(null);
-  const [view, setView] = useState<View>({ name: 'today' });
+  const [tab, setTab] = useState<Tab>('today');
+  const [overlay, setOverlay] = useState<Overlay | null>(null);
+  const [focusHabitId, setFocusHabitId] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -40,9 +48,21 @@ function App() {
     } else {
       setHabits([]);
       setHasEverHadHabit(null);
-      setView({ name: 'today' });
+      setTab('today');
+      setOverlay(null);
     }
   }, [userId, loadHabits]);
+
+  function selectTab(next: Tab) {
+    setTab(next);
+    setOverlay(null);
+    setFocusHabitId(null);
+  }
+
+  function viewHabitHistory(habitId: string) {
+    setFocusHabitId(habitId);
+    setTab('calendar');
+  }
 
   if (session === undefined) {
     return (
@@ -64,46 +84,60 @@ function App() {
     );
   }
 
-  if (view.name === 'addEdit') {
-    const habit = view.habitId ? habits.find((h) => h.id === view.habitId) ?? null : null;
-    return (
-      <AddEditHabit
-        habit={habit}
-        onDone={async () => {
-          await loadHabits();
-          setView({ name: 'today' });
-        }}
-        onCancel={() => setView({ name: 'today' })}
-      />
-    );
-  }
-
-  if (view.name === 'history') {
-    const habit = habits.find((h) => h.id === view.habitId);
-    if (!habit) {
-      setView({ name: 'today' });
-      return null;
-    }
-    return <HabitHistory habit={habit} onBack={() => setView({ name: 'today' })} />;
-  }
-
   if (!hasEverHadHabit) {
     return (
       <GetStarted
         onHabitAdded={loadHabits}
-        onAddCustom={() => setView({ name: 'addEdit', habitId: null })}
+        onAddCustom={() => setOverlay({ name: 'addEdit', habit: null })}
+      />
+    );
+  }
+
+  if (overlay?.name === 'addEdit') {
+    return (
+      <AddEditHabit
+        habit={overlay.habit}
+        prefill={overlay.prefill}
+        onDone={async () => {
+          await loadHabits();
+          setOverlay(null);
+        }}
+        onCancel={() => setOverlay(null)}
+      />
+    );
+  }
+
+  if (overlay?.name === 'library') {
+    return (
+      <HabitLibrary
+        onBack={() => setOverlay(null)}
+        onPick={(libHabit) => setOverlay({ name: 'addEdit', habit: null, prefill: libHabit })}
       />
     );
   }
 
   return (
-    <Today
-      habits={habits}
-      onAddHabit={() => setView({ name: 'addEdit', habitId: null })}
-      onEditHabit={(habitId) => setView({ name: 'addEdit', habitId })}
-      onViewHistory={(habitId) => setView({ name: 'history', habitId })}
-      onSignOut={() => supabase.auth.signOut()}
-    />
+    <>
+      {tab === 'today' && (
+        <Today
+          habits={habits}
+          onAddHabit={() => setOverlay({ name: 'addEdit', habit: null })}
+          onEditHabit={(habitId) => setOverlay({ name: 'addEdit', habit: habits.find((h) => h.id === habitId) ?? null })}
+          onViewHistory={viewHabitHistory}
+          onSignOut={() => supabase.auth.signOut()}
+        />
+      )}
+      {tab === 'calendar' && <Calendar habits={habits} initialHabitId={focusHabitId} />}
+      {tab === 'stats' && <Stats habits={habits} />}
+      {tab === 'habits' && (
+        <ManageHabits
+          onHabitsChanged={loadHabits}
+          onOpenLibrary={() => setOverlay({ name: 'library' })}
+          onAddHabit={() => setOverlay({ name: 'addEdit', habit: null })}
+        />
+      )}
+      <NavBar active={tab} onSelect={selectTab} />
+    </>
   );
 }
 

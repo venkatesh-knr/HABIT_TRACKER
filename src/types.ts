@@ -1,4 +1,5 @@
 export type Schedule = 'daily' | 'weekdays' | 'custom';
+export type TargetType = 'boolean' | 'count';
 
 export interface Habit {
   id: string;
@@ -8,6 +9,9 @@ export interface Habit {
   color: string;
   is_archived: boolean;
   created_at: string;
+  target_type: TargetType;
+  target_value: number | null;
+  target_unit: string | null;
 }
 
 export interface HabitLog {
@@ -16,6 +20,7 @@ export interface HabitLog {
   user_id: string;
   log_date: string;
   completed: boolean;
+  value: number | null;
   created_at: string;
 }
 
