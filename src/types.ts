@@ -28,3 +28,16 @@ export interface StreakSummary {
   current_streak: number;
   longest_streak: number;
 }
+
+export type AgeRange = '18-29' | '30-44' | '45-59' | '60+';
+export type Gender = 'male' | 'female' | 'prefer_not_to_say';
+
+export interface Profile {
+  id: string;
+  display_name: string;
+  avatar_emoji: string;
+  timezone: string;
+  age_range: AgeRange | null;
+  gender: Gender | null;
+  created_at: string;
+}

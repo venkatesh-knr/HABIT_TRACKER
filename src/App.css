@@ -271,11 +271,6 @@ fieldset.field legend {
   color: var(--primary);
 }
 
-.nav-tab-icon {
-  font-size: 18px;
-  line-height: 1;
-}
-
 .nav-tab-label {
   font-size: 11px;
 }
@@ -640,4 +635,154 @@ fieldset.field legend {
   justify-content: space-between;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+/* Nav icons (SVG replaced the old text glyphs) */
+
+.nav-tab-icon {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+/* Profile */
+
+.avatar-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.avatar-option {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-option.selected {
+  border-color: var(--primary);
+  background: var(--surface);
+}
+
+.field-note {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.save-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.save-row .btn-primary {
+  flex: 1;
+}
+
+.saved-note {
+  font-size: 13px;
+  color: var(--primary);
+}
+
+.section-title {
+  font-size: 15px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin: 24px 0 10px;
+}
+
+.guide-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.guide-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.guide-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.guide-icon {
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.guide-heading-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.guide-heading-text h3 {
+  font-size: 15px;
+  margin: 0;
+}
+
+.guide-basis {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 2px 0 0;
+}
+
+.guide-figure {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.guide-metric {
+  margin-top: 10px;
+}
+
+.guide-metric-text {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 6px 0 0;
+}
+
+.guide-metric-text strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.guide-add {
+  align-self: flex-start;
+  padding: 8px 0 2px;
+  font-size: 13px;
+  text-align: left;
+}
+
+.disclaimer {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin: 4px 0 0;
+}
+
+.sign-out {
+  margin-top: 24px;
+  color: var(--danger);
+}
+
+/* the fill is given a habit colour inline on Stats; this is the default */
+.progress-bar-fill {
+  background: var(--primary);
 }

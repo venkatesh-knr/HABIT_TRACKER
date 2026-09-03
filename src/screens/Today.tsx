@@ -13,10 +13,9 @@ interface Props {
   onAddHabit: () => void;
   onEditHabit: (habitId: string) => void;
   onViewHistory: (habitId: string) => void;
-  onSignOut: () => void;
 }
 
-export function Today({ habits, onAddHabit, onEditHabit, onViewHistory, onSignOut }: Props) {
+export function Today({ habits, onAddHabit, onEditHabit, onViewHistory }: Props) {
   const [logs, setLogs] = useState<Record<string, TodayLog>>({});
   const [streaks, setStreaks] = useState<Record<string, StreakSummary>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -93,9 +92,6 @@ export function Today({ habits, onAddHabit, onEditHabit, onViewHistory, onSignOu
     <div className="screen">
       <header className="top-bar">
         <h1>Today</h1>
-        <button type="button" className="btn-link" onClick={onSignOut}>
-          Sign out
-        </button>
       </header>
 
       {habits.length === 0 && <p className="subtitle">No habits yet — add one to get started.</p>}

@@ -1,12 +1,5 @@
-> ## ⚠️ HISTORICAL — DO NOT FOLLOW THIS FILE
->
-> This was the from-scratch build brief. **The app is already built.** Following it again
-> would scaffold over existing work and its SQL is now out of date.
->
-> - For the current database schema: **`supabase/schema.sql`** (authoritative, idempotent).
-> - For what to work on next: **`REVIEW.md`**.
->
-> Kept only as a record of the original plan.
+> ## ⚠️ HISTORICAL — the original build brief the app was actually built from.
+> Do not follow. Current schema: `supabase/schema.sql`. Current work list: `REVIEW.md`.
 
 # Ritual — Build Instructions for Claude Code
 
@@ -74,42 +67,6 @@ VITE_SUPABASE_ANON_KEY=eyJ...
 In the Supabase dashboard, open **SQL Editor → New query**, paste the following, and click **Run**. This is the entire backend — no server code needed.
 
 ```sql
--- profiles: one row per user, mirroring auth.users 1:1
-create table public.profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
-  display_name text not null default 'Friend',
-  avatar_emoji text not null default '🌱',
-  timezone text not null default 'UTC',
-  age_range text check (age_range in ('18-29', '30-44', '45-59', '60+')),
-  gender text check (gender in ('male', 'female', 'prefer_not_to_say')),
-  created_at timestamptz not null default now()
-);
-
-alter table public.profiles enable row level security;
-
-create policy "profiles_select_own" on public.profiles for select using (auth.uid() = id);
-create policy "profiles_update_own" on public.profiles for update using (auth.uid() = id);
--- no insert policy: only the trigger below ever creates a profile row, and it runs
--- with elevated privileges (security definer), bypassing RLS on purpose for that one action
-
--- auto-create a profile the instant someone signs up
-create or replace function public.handle_new_user()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  insert into public.profiles (id, display_name)
-  values (new.id, split_part(new.email, '@', 1));
-  return new;
-end;
-$$;
-
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute function public.handle_new_user();
-
 -- habits: each row belongs to exactly one user
 create table public.habits (
   id uuid primary key default gen_random_uuid(),
@@ -147,9 +104,7 @@ create policy "logs_insert_own" on public.habit_logs for insert with check (auth
 create policy "logs_update_own" on public.habit_logs for update using (auth.uid() = user_id);
 create policy "logs_delete_own" on public.habit_logs for delete using (auth.uid() = user_id);
 
--- streak calculation, done once server-side instead of in the browser —
--- uses the caller's own profile timezone so "today" matches their local day,
--- not the database server's UTC clock
+-- streak calculation, done once server-side instead of in the browser
 create or replace function public.get_streak_summary(p_habit_id uuid)
 returns table(current_streak integer, longest_streak integer)
 language plpgsql
@@ -158,12 +113,7 @@ set search_path = public
 as $$
 declare
   v_user_id uuid := auth.uid();
-  v_timezone text;
-  v_today date;
 begin
-  select timezone into v_timezone from profiles where id = v_user_id;
-  v_today := (now() at time zone coalesce(v_timezone, 'UTC'))::date;
-
   return query
   with completed_days as (
     select log_date
@@ -185,7 +135,7 @@ begin
   )
   select
     coalesce((select streak_length::int from streaks
-              where streak_end >= v_today - interval '1 day'
+              where streak_end >= current_date - interval '1 day'
               order by streak_end desc limit 1), 0),
     coalesce((select max(streak_length)::int from streaks), 0);
 end;
@@ -194,7 +144,7 @@ $$;
 grant execute on function public.get_streak_summary(uuid) to authenticated;
 ```
 
-**Claude Code: after running this, write a short test — sign up two dummy users and confirm user A can never see or modify user B's habits, logs, or profile, even by guessing an id.** This is the isolation guarantee the whole design rests on; don't skip verifying it.
+**Claude Code: after running this, write a short test — sign up two dummy users and confirm user A can never see or modify user B's habits or logs, even by guessing an id.** This is the isolation guarantee the whole design rests on; don't skip verifying it.
 
 ---
 
@@ -215,45 +165,13 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 ## Phase 5 — Screens
 
-Build these six screens (all one column, responsive, no separate mobile layout needed):
+Build these five screens (all one column, responsive, no separate mobile layout needed):
 
 1. **Sign in / Register** — email + password, one form that toggles between the two modes. Uses `supabase.auth.signInWithPassword()` / `supabase.auth.signUp()`.
 2. **Get started** *(first sign-in only)* — a strip of tap-to-add suggestion chips from a static list (below); tapping one calls the same insert as creating a habit manually. Hide this screen permanently once the user has at least one habit.
 3. **Today** — lists active (non-archived) habits with a tap-to-toggle checkbox for today, and each habit's current streak shown inline (from `get_streak_summary`).
 4. **Habit history** — a small grid of recent days for one habit (last ~4 weeks), filled cells = completed.
 5. **Add / Edit habit** — name, color, schedule. "Delete" archives (`is_archived = true`) rather than deleting, so history is preserved.
-6. **Profile** — display name, avatar emoji, timezone, and two *optional* fields (age range, gender) that unlock a read-only "Your general guidelines" panel (sleep / activity / hydration, from the static lookup below) with a small disclaimer and a quick "+ Add a habit for this" button per row that reuses the normal add-habit insert. Both fields default to blank; leaving them blank shows the unisex adult defaults instead of hiding the panel.
-
-`src/lib/wellnessGuidelines.ts`:
-
-```ts
-type AgeRange = '18-29' | '30-44' | '45-59' | '60+';
-type Gender = 'male' | 'female' | 'prefer_not_to_say';
-
-const SLEEP: Record<AgeRange, string> = {
-  '18-29': '7–9 hrs / night',
-  '30-44': '7–9 hrs / night',
-  '45-59': '7–9 hrs / night',
-  '60+': '7–8 hrs / night',
-};
-
-const HYDRATION: Record<Gender, string> = {
-  male: '~3.0–3.7 L / day',
-  female: '~2.2–2.7 L / day',
-  prefer_not_to_say: '~2.5–3.5 L / day',
-};
-
-export function getWellnessGuidelines(ageRange?: AgeRange | null, gender?: Gender | null) {
-  return {
-    sleep: ageRange ? SLEEP[ageRange] : '7–9 hrs / night (general adult guideline)',
-    activity: `≥150 min / week moderate activity${ageRange === '60+' ? ', plus balance exercises' : ''}`,
-    hydration: HYDRATION[gender ?? 'prefer_not_to_say'],
-    disclaimer: 'General wellness guidance, not medical advice — consult a professional for anything personalized.',
-  };
-}
-```
-
-Note for Claude Code: these are static, generic reference ranges — resist the temptation to compute anything more clinical (BMI, calorie targets, etc.) from this data. That's out of scope for this app and starts to look like medical advice rather than general wellness information.
 
 `src/lib/starterHabits.ts`:
 
@@ -288,12 +206,6 @@ supabase.from('habit_logs').select('log_date, completed').eq('habit_id', habitId
 
 // streak numbers
 supabase.rpc('get_streak_summary', { p_habit_id: habitId });
-
-// get profile (already exists — created by the signup trigger)
-supabase.from('profiles').select('*').single();
-
-// update profile (name, avatar, timezone, age_range, gender — any subset)
-supabase.from('profiles').update({ display_name, avatar_emoji, timezone, age_range, gender }).eq('id', userId);
 ```
 
 ---
@@ -447,6 +359,3 @@ If the Supabase project sits untouched for 7+ days, it pauses automatically — 
 - [ ] Confirm the app installs on a phone and opens full-screen with no address bar
 - [ ] Confirm the same account shows the same habits on both phone and laptop
 - [ ] Confirm `.env` is in `.gitignore` and was never committed
-- [ ] Confirm a new signup gets a profile row automatically (no manual step) with a sensible default display name
-- [ ] Confirm age range and gender can both be left blank without breaking the Profile screen, and that the guidelines panel still shows sensible unisex defaults in that case
-- [ ] Confirm the wellness guidelines panel shows its "not medical advice" disclaimer, not just the numbers

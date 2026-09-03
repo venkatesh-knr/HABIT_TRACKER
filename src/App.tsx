@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 import type { Habit } from './types';
 import type { LibraryHabit } from './lib/habitLibrary';
+import { HABIT_LIBRARY } from './lib/habitLibrary';
 import { AuthScreen } from './screens/AuthScreen';
 import { GetStarted } from './screens/GetStarted';
 import { Today } from './screens/Today';
@@ -11,6 +12,7 @@ import { Stats } from './screens/Stats';
 import { ManageHabits } from './screens/ManageHabits';
 import { HabitLibrary } from './screens/HabitLibrary';
 import { AddEditHabit } from './screens/AddEditHabit';
+import { Profile } from './screens/Profile';
 import { NavBar } from './components/NavBar';
 import type { Tab } from './components/NavBar';
 import './App.css';
@@ -57,6 +59,11 @@ function App() {
     setTab(next);
     setOverlay(null);
     setFocusHabitId(null);
+  }
+
+  function addSuggestedHabit(habitName: string) {
+    const fromLibrary = HABIT_LIBRARY.find((h) => h.name === habitName) ?? null;
+    setOverlay({ name: 'addEdit', habit: null, prefill: fromLibrary });
   }
 
   function viewHabitHistory(habitId: string) {
@@ -124,7 +131,6 @@ function App() {
           onAddHabit={() => setOverlay({ name: 'addEdit', habit: null })}
           onEditHabit={(habitId) => setOverlay({ name: 'addEdit', habit: habits.find((h) => h.id === habitId) ?? null })}
           onViewHistory={viewHabitHistory}
-          onSignOut={() => supabase.auth.signOut()}
         />
       )}
       {tab === 'calendar' && <Calendar habits={habits} initialHabitId={focusHabitId} />}
@@ -134,6 +140,13 @@ function App() {
           onHabitsChanged={loadHabits}
           onOpenLibrary={() => setOverlay({ name: 'library' })}
           onAddHabit={() => setOverlay({ name: 'addEdit', habit: null })}
+        />
+      )}
+      {tab === 'profile' && (
+        <Profile
+          habits={habits}
+          onAddSuggestedHabit={addSuggestedHabit}
+          onSignOut={() => supabase.auth.signOut()}
         />
       )}
       <NavBar active={tab} onSelect={selectTab} />
