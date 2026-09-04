@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { useHabitDayLogs } from '../lib/useHabitDayLogs';
 import {
   addDaysISO,
+  addMonthsISO,
   daysInMonth,
   formatDayLabel,
   formatMonthLabel,
@@ -20,28 +22,17 @@ interface Props {
   initialHabitId?: string | null;
 }
 
-interface DayLog {
-  completed: number;
-  total: number;
-}
-
-interface DayEntry {
-  completed: boolean;
-  value: number | null;
-}
-
 const YEAR_WEEKS = 52;
 
 export function Calendar({ habits, initialHabitId }: Props) {
   const [period, setPeriod] = useState<Period>('month');
   const [selectedHabitId, setSelectedHabitId] = useState<string | null>(initialHabitId ?? null);
   const [anchor, setAnchor] = useState(todayISO());
-  const [dayLogs, setDayLogs] = useState<Record<string, DayLog>>({});
+  const [dayLogs, setDayLogs] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
   // day-view editable state (always covers all habits for the anchor date)
-  const [dayEntries, setDayEntries] = useState<Record<string, DayEntry>>({});
-  const [busyHabitId, setBusyHabitId] = useState<string | null>(null);
+  const { logs: dayEntries, toggleBoolean, adjustCount } = useHabitDayLogs(anchor);
 
   useEffect(() => {
     if (initialHabitId) {
@@ -87,12 +78,10 @@ export function Calendar({ habits, initialHabitId }: Props) {
 
       if (cancelled) return;
 
-      const map: Record<string, DayLog> = {};
+      const map: Record<string, number> = {};
       for (const row of data ?? []) {
         if (!row.completed) continue;
-        const entry = map[row.log_date] ?? { completed: 0, total: habitIds.length };
-        entry.completed += 1;
-        map[row.log_date] = entry;
+        map[row.log_date] = (map[row.log_date] ?? 0) + 1;
       }
       setDayLogs(map);
       setLoading(false);
@@ -103,65 +92,53 @@ export function Calendar({ habits, initialHabitId }: Props) {
     };
   }, [range.start, range.end, selectedHabitId, habits]);
 
-  useEffect(() => {
-    if (period !== 'day') return;
-    let cancelled = false;
-    async function loadDay() {
-      const { data } = await supabase.from('habit_logs').select('habit_id, completed, value').eq('log_date', anchor);
-      if (cancelled) return;
-      const map: Record<string, DayEntry> = {};
-      for (const row of data ?? []) {
-        map[row.habit_id] = { completed: row.completed, value: row.value };
-      }
-      setDayEntries(map);
-    }
-    loadDay();
-    return () => {
-      cancelled = true;
-    };
-  }, [period, anchor]);
-
-  async function toggleBoolean(habitId: string) {
-    const currentlyDone = dayEntries[habitId]?.completed ?? false;
-    setBusyHabitId(habitId);
-    const { error } = await supabase
-      .from('habit_logs')
-      .upsert({ habit_id: habitId, log_date: anchor, completed: !currentlyDone }, { onConflict: 'habit_id,log_date' });
-    setBusyHabitId(null);
-    if (error) {
-      alert(error.message);
-      return;
-    }
-    setDayEntries((prev) => ({ ...prev, [habitId]: { completed: !currentlyDone, value: null } }));
+  function shiftAnchor(direction: 1 | -1) {
+    setAnchor((prev) => {
+      if (period === 'month') return addMonthsISO(prev, direction);
+      const days = period === 'day' ? direction : period === 'week' ? direction * 7 : direction * 364;
+      return addDaysISO(prev, days);
+    });
   }
 
-  async function adjustCount(habit: Habit, delta: number) {
-    const target = habit.target_value ?? 1;
-    const currentValue = Math.max(0, dayEntries[habit.id]?.value ?? 0);
-    const nextValue = Math.max(0, currentValue + delta);
-    setBusyHabitId(habit.id);
-    const { error } = await supabase.from('habit_logs').upsert(
-      { habit_id: habit.id, log_date: anchor, value: nextValue, completed: nextValue >= target },
-      { onConflict: 'habit_id,log_date' }
-    );
-    setBusyHabitId(null);
-    if (error) {
-      alert(error.message);
-      return;
-    }
-    setDayEntries((prev) => ({ ...prev, [habit.id]: { completed: nextValue >= target, value: nextValue } }));
+  const today = todayISO();
+  const canGoNext = range.end < today;
+
+  function existedCountForDate(dateISO: string): number {
+    const relevant = selectedHabit ? [selectedHabit] : habits;
+    return relevant.filter((h) => h.created_at.slice(0, 10) <= dateISO).length;
   }
 
-  function shiftAnchor(days: number) {
-    setAnchor((prev) => addDaysISO(prev, days));
+  function cellState(dateISO: string): 'completed' | 'missed' | 'out-of-range' {
+    if (dateISO > today) return 'out-of-range';
+    if ((dayLogs[dateISO] ?? 0) > 0) return 'completed';
+    return existedCountForDate(dateISO) > 0 ? 'missed' : 'out-of-range';
   }
 
   function cellStyle(dateISO: string): React.CSSProperties {
-    const log = dayLogs[dateISO];
-    if (!log || log.completed === 0) return {};
-    const intensity = log.completed / log.total;
+    const completed = dayLogs[dateISO] ?? 0;
+    if (completed === 0) return {};
+    const existed = Math.max(1, existedCountForDate(dateISO));
+    const intensity = Math.min(1, completed / existed);
     const color = selectedHabit?.color ?? '#3F6C51';
     return { background: color, opacity: 0.35 + intensity * 0.65 };
+  }
+
+  function cellAriaLabel(dateISO: string): string {
+    const state = cellState(dateISO);
+    const dayText = new Date(dateISO + 'T00:00:00').toLocaleDateString(undefined, {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    });
+    if (state === 'out-of-range') {
+      return dateISO > today ? `${dayText}, upcoming` : `${dayText}, before tracking started`;
+    }
+    if (selectedHabit) {
+      return `${dayText}, ${state === 'completed' ? 'completed' : 'not completed'}`;
+    }
+    const completed = dayLogs[dateISO] ?? 0;
+    const existed = existedCountForDate(dateISO);
+    return `${dayText}, ${completed} of ${existed} habit${existed === 1 ? '' : 's'} completed`;
   }
 
   const headerLabel =
@@ -202,21 +179,11 @@ export function Calendar({ habits, initialHabitId }: Props) {
       </div>
 
       <div className="calendar-nav">
-        <button
-          type="button"
-          className="btn-icon"
-          onClick={() => shiftAnchor(period === 'day' ? -1 : period === 'week' ? -7 : period === 'month' ? -30 : -364)}
-          aria-label="Previous"
-        >
+        <button type="button" className="btn-icon" onClick={() => shiftAnchor(-1)} aria-label="Previous">
           ‹
         </button>
         <span className="calendar-label">{headerLabel}</span>
-        <button
-          type="button"
-          className="btn-icon"
-          onClick={() => shiftAnchor(period === 'day' ? 1 : period === 'week' ? 7 : period === 'month' ? 30 : 364)}
-          aria-label="Next"
-        >
+        <button type="button" className="btn-icon" onClick={() => shiftAnchor(1)} disabled={!canGoNext} aria-label="Next">
           ›
         </button>
       </div>
@@ -233,12 +200,7 @@ export function Calendar({ habits, initialHabitId }: Props) {
               <li key={h.id} className="habit-row">
                 {isCount ? (
                   <div className="count-control">
-                    <button
-                      type="button"
-                      className="count-btn"
-                      disabled={busyHabitId === h.id || value === 0}
-                      onClick={() => adjustCount(h, -1)}
-                    >
+                    <button type="button" className="count-btn" disabled={value === 0} onClick={() => adjustCount(h, -1)}>
                       −
                     </button>
                     <span
@@ -247,7 +209,7 @@ export function Calendar({ habits, initialHabitId }: Props) {
                     >
                       {done ? '✓' : value}
                     </span>
-                    <button type="button" className="count-btn" disabled={busyHabitId === h.id} onClick={() => adjustCount(h, 1)}>
+                    <button type="button" className="count-btn" onClick={() => adjustCount(h, 1)}>
                       +
                     </button>
                   </div>
@@ -256,7 +218,6 @@ export function Calendar({ habits, initialHabitId }: Props) {
                     type="button"
                     className={`check ${done ? 'checked' : ''}`}
                     style={{ borderColor: h.color, background: done ? h.color : 'transparent' }}
-                    disabled={busyHabitId === h.id}
                     onClick={() => toggleBoolean(h.id)}
                   >
                     {done ? '✓' : ''}
@@ -284,8 +245,10 @@ export function Calendar({ habits, initialHabitId }: Props) {
             <button
               key={date}
               type="button"
-              className="week-cell"
+              className={`week-cell day-${cellState(date)}`}
               style={cellStyle(date)}
+              disabled={date > today}
+              aria-label={cellAriaLabel(date)}
               onClick={() => {
                 setAnchor(date);
                 setPeriod('day');
@@ -299,10 +262,25 @@ export function Calendar({ habits, initialHabitId }: Props) {
       )}
 
       {period === 'month' && !loading && (
-        <MonthGrid anchor={anchor} cellStyle={cellStyle} onPickDay={(date) => { setAnchor(date); setPeriod('day'); }} />
+        <MonthGrid
+          anchor={anchor}
+          today={today}
+          cellStyle={cellStyle}
+          cellState={cellState}
+          cellAriaLabel={cellAriaLabel}
+          onPickDay={(date) => { setAnchor(date); setPeriod('day'); }}
+        />
       )}
 
-      {period === 'year' && !loading && <YearHeatmap start={range.start} end={range.end} cellStyle={cellStyle} />}
+      {period === 'year' && !loading && (
+        <YearHeatmap
+          start={range.start}
+          end={range.end}
+          cellStyle={cellStyle}
+          cellState={cellState}
+          selectedHabitName={selectedHabit?.name ?? null}
+        />
+      )}
 
       {loading && period !== 'day' && <p className="subtitle">Loading…</p>}
     </div>
@@ -311,11 +289,17 @@ export function Calendar({ habits, initialHabitId }: Props) {
 
 function MonthGrid({
   anchor,
+  today,
   cellStyle,
+  cellState,
+  cellAriaLabel,
   onPickDay,
 }: {
   anchor: string;
+  today: string;
   cellStyle: (date: string) => React.CSSProperties;
+  cellState: (date: string) => 'completed' | 'missed' | 'out-of-range';
+  cellAriaLabel: (date: string) => string;
   onPickDay: (date: string) => void;
 }) {
   const d = new Date(anchor + 'T00:00:00');
@@ -325,7 +309,6 @@ function MonthGrid({
   const leading = weekdayIndex(firstDay);
   const totalDays = daysInMonth(year, month);
   const cells: (string | null)[] = [...Array(leading).fill(null), ...Array.from({ length: totalDays }, (_, i) => addDaysISO(firstDay, i))];
-  const today = todayISO();
 
   return (
     <div className="month-grid">
@@ -339,8 +322,10 @@ function MonthGrid({
           <button
             key={date}
             type="button"
-            className={`month-cell ${date === today ? 'today' : ''}`}
+            className={`month-cell day-${cellState(date)} ${date === today ? 'today' : ''}`}
             style={cellStyle(date)}
+            disabled={date > today}
+            aria-label={cellAriaLabel(date)}
             onClick={() => onPickDay(date)}
           >
             {Number(date.slice(8, 10))}
@@ -357,25 +342,41 @@ function YearHeatmap({
   start,
   end,
   cellStyle,
+  cellState,
+  selectedHabitName,
 }: {
   start: string;
   end: string;
   cellStyle: (date: string) => React.CSSProperties;
+  cellState: (date: string) => 'completed' | 'missed' | 'out-of-range';
+  selectedHabitName: string | null;
 }) {
   const columns: string[][] = [];
   let cursor = start;
+  let completedCount = 0;
   while (cursor <= end) {
     const week = Array.from({ length: 7 }, (_, i) => addDaysISO(cursor, i)).filter((d) => d <= end);
+    for (const date of week) {
+      if (cellState(date) === 'completed') completedCount++;
+    }
     columns.push(week);
     cursor = addDaysISO(cursor, 7);
   }
 
+  const summary = `Completion heatmap for ${selectedHabitName ?? 'all habits'} over the last 52 weeks: ${completedCount} day${completedCount === 1 ? '' : 's'} completed.`;
+
   return (
-    <div className="year-heatmap">
+    <div className="year-heatmap" role="img" aria-label={summary}>
       {columns.map((week, wi) => (
         <div key={wi} className="year-heatmap-col">
           {week.map((date) => (
-            <div key={date} className="year-heatmap-cell" style={cellStyle(date)} title={date} />
+            <div
+              key={date}
+              className={`year-heatmap-cell day-${cellState(date)}`}
+              style={cellStyle(date)}
+              title={date}
+              aria-hidden="true"
+            />
           ))}
         </div>
       ))}

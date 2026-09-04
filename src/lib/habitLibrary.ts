@@ -1,11 +1,10 @@
-import type { Schedule, TargetType } from '../types';
+import type { TargetType } from '../types';
 
 export interface LibraryHabit {
   name: string;
   color: string;
   category: string;
   quickStart?: boolean;
-  schedule?: Schedule;
   target_type?: TargetType;
   target_value?: number;
   target_unit?: string;

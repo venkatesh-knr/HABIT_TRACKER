@@ -192,3 +192,62 @@ end;
 $$;
 
 grant execute on function public.get_streak_summary(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Same streak calculation as get_streak_summary, but for every one of the
+-- caller's habits in a single round trip instead of one call per habit.
+-- ---------------------------------------------------------------------------
+create or replace function public.get_all_streak_summaries()
+returns table(habit_id uuid, current_streak integer, longest_streak integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_timezone text;
+  v_today date;
+begin
+  select timezone into v_timezone from profiles where id = v_user_id;
+  v_today := (now() at time zone coalesce(v_timezone, 'UTC'))::date;
+
+  return query
+  with completed_days as (
+    select l.habit_id, l.log_date
+    from habit_logs l
+    where l.user_id = v_user_id
+      and l.completed = true
+      and l.log_date <= v_today
+  ),
+  grouped as (
+    select
+      cd.habit_id,
+      cd.log_date,
+      cd.log_date - (row_number() over (partition by cd.habit_id order by cd.log_date))::int * interval '1 day' as grp
+    from completed_days cd
+  ),
+  streaks as (
+    select g.habit_id, max(g.log_date) as streak_end, count(*) as streak_length
+    from grouped g
+    group by g.habit_id, g.grp
+  ),
+  current_streaks as (
+    select distinct on (s.habit_id) s.habit_id, s.streak_length::int as current_streak
+    from streaks s
+    where s.streak_end >= v_today - interval '1 day'
+    order by s.habit_id, s.streak_end desc
+  ),
+  longest_streaks as (
+    select s.habit_id, max(s.streak_length)::int as longest_streak
+    from streaks s
+    group by s.habit_id
+  )
+  select h.id, coalesce(c.current_streak, 0), coalesce(l.longest_streak, 0)
+  from habits h
+  left join current_streaks c on c.habit_id = h.id
+  left join longest_streaks l on l.habit_id = h.id
+  where h.user_id = v_user_id;
+end;
+$$;
+
+grant execute on function public.get_all_streak_summaries() to authenticated;

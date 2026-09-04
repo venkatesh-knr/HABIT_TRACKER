@@ -18,7 +18,6 @@ export function GetStarted({ onHabitAdded, onAddCustom }: Props) {
     const { error } = await supabase.from('habits').insert({
       name: habit.name,
       color: habit.color,
-      schedule: habit.schedule ?? 'daily',
       target_type: habit.target_type ?? 'boolean',
       target_value: habit.target_value ?? null,
       target_unit: habit.target_unit ?? null,

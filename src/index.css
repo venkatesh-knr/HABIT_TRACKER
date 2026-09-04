@@ -9,10 +9,21 @@
   --danger: #a1402f;
 
   font: 16px/145% system-ui, 'Segoe UI', Roboto, sans-serif;
-  color-scheme: light;
+  color-scheme: light dark;
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14160f;
+    --surface: #1e2118;
+    --text: #ececE6;
+    --text-muted: #9a9d8e;
+    --border: #33362a;
+    --danger: #c9584a;
+  }
 }
 
 * {
@@ -27,4 +38,9 @@ body {
   min-height: 100svh;
   display: flex;
   flex-direction: column;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
