@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
+import { useConfirm } from '../lib/feedback';
 import type { Habit, TargetType } from '../types';
 import type { LibraryHabit } from '../lib/habitLibrary';
 
@@ -21,6 +22,7 @@ export function AddEditHabit({ habit, prefill, onDone, onCancel }: Props) {
   const [targetUnit, setTargetUnit] = useState(habit?.target_unit ?? prefill?.target_unit ?? '');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const confirm = useConfirm();
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -52,7 +54,13 @@ export function AddEditHabit({ habit, prefill, onDone, onCancel }: Props) {
 
   async function handleDelete() {
     if (!habit) return;
-    if (!confirm(`Archive "${habit.name}"? Its history will be kept.`)) return;
+    const ok = await confirm({
+      title: 'Archive habit',
+      message: `Archive "${habit.name}"? Its history will be kept.`,
+      confirmLabel: 'Archive',
+      danger: true,
+    });
+    if (!ok) return;
     setSaving(true);
     const { error } = await supabase.from('habits').update({ is_archived: true }).eq('id', habit.id);
     setSaving(false);

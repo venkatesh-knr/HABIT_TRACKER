@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { useToast } from '../lib/feedback';
 import type { Habit } from '../types';
 
 interface Props {
@@ -14,6 +15,7 @@ export function ManageHabits({ onHabitsChanged, onOpenLibrary, onAddHabit }: Pro
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const showToast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,7 +56,7 @@ export function ManageHabits({ onHabitsChanged, onOpenLibrary, onAddHabit }: Pro
     const { error } = await supabase.from('habits').update({ is_archived: archived }).in('id', Array.from(selected));
     setBusy(false);
     if (error) {
-      alert(error.message);
+      showToast(error.message);
       return;
     }
     await load();
