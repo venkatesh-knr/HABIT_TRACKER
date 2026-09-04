@@ -38,6 +38,16 @@ export function daysInMonth(year: number, month: number): number {
   return new Date(year, month + 1, 0).getDate();
 }
 
+/** Adds calendar months, clamping the day-of-month to the target month's length. */
+export function addMonthsISO(dateISO: string, months: number): string {
+  const d = new Date(dateISO + 'T00:00:00');
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + months);
+  d.setDate(Math.min(day, daysInMonth(d.getFullYear(), d.getMonth())));
+  return toLocalISO(d);
+}
+
 export function formatMonthLabel(year: number, month: number): string {
   return new Date(year, month, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }

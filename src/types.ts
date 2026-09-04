@@ -1,11 +1,9 @@
-export type Schedule = 'daily' | 'weekdays' | 'custom';
 export type TargetType = 'boolean' | 'count';
 
 export interface Habit {
   id: string;
   user_id: string;
   name: string;
-  schedule: Schedule;
   color: string;
   is_archived: boolean;
   created_at: string;

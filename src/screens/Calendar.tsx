@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   addDaysISO,
+  addMonthsISO,
   daysInMonth,
   formatDayLabel,
   formatMonthLabel,
@@ -152,9 +153,16 @@ export function Calendar({ habits, initialHabitId }: Props) {
     setDayEntries((prev) => ({ ...prev, [habit.id]: { completed: nextValue >= target, value: nextValue } }));
   }
 
-  function shiftAnchor(days: number) {
-    setAnchor((prev) => addDaysISO(prev, days));
+  function shiftAnchor(direction: 1 | -1) {
+    setAnchor((prev) => {
+      if (period === 'month') return addMonthsISO(prev, direction);
+      const days = period === 'day' ? direction : period === 'week' ? direction * 7 : direction * 364;
+      return addDaysISO(prev, days);
+    });
   }
+
+  const today = todayISO();
+  const canGoNext = range.end < today;
 
   function cellStyle(dateISO: string): React.CSSProperties {
     const log = dayLogs[dateISO];
@@ -202,21 +210,11 @@ export function Calendar({ habits, initialHabitId }: Props) {
       </div>
 
       <div className="calendar-nav">
-        <button
-          type="button"
-          className="btn-icon"
-          onClick={() => shiftAnchor(period === 'day' ? -1 : period === 'week' ? -7 : period === 'month' ? -30 : -364)}
-          aria-label="Previous"
-        >
+        <button type="button" className="btn-icon" onClick={() => shiftAnchor(-1)} aria-label="Previous">
           ‹
         </button>
         <span className="calendar-label">{headerLabel}</span>
-        <button
-          type="button"
-          className="btn-icon"
-          onClick={() => shiftAnchor(period === 'day' ? 1 : period === 'week' ? 7 : period === 'month' ? 30 : 364)}
-          aria-label="Next"
-        >
+        <button type="button" className="btn-icon" onClick={() => shiftAnchor(1)} disabled={!canGoNext} aria-label="Next">
           ›
         </button>
       </div>
@@ -286,6 +284,7 @@ export function Calendar({ habits, initialHabitId }: Props) {
               type="button"
               className="week-cell"
               style={cellStyle(date)}
+              disabled={date > today}
               onClick={() => {
                 setAnchor(date);
                 setPeriod('day');
@@ -299,7 +298,12 @@ export function Calendar({ habits, initialHabitId }: Props) {
       )}
 
       {period === 'month' && !loading && (
-        <MonthGrid anchor={anchor} cellStyle={cellStyle} onPickDay={(date) => { setAnchor(date); setPeriod('day'); }} />
+        <MonthGrid
+          anchor={anchor}
+          today={today}
+          cellStyle={cellStyle}
+          onPickDay={(date) => { setAnchor(date); setPeriod('day'); }}
+        />
       )}
 
       {period === 'year' && !loading && <YearHeatmap start={range.start} end={range.end} cellStyle={cellStyle} />}
@@ -311,10 +315,12 @@ export function Calendar({ habits, initialHabitId }: Props) {
 
 function MonthGrid({
   anchor,
+  today,
   cellStyle,
   onPickDay,
 }: {
   anchor: string;
+  today: string;
   cellStyle: (date: string) => React.CSSProperties;
   onPickDay: (date: string) => void;
 }) {
@@ -325,7 +331,6 @@ function MonthGrid({
   const leading = weekdayIndex(firstDay);
   const totalDays = daysInMonth(year, month);
   const cells: (string | null)[] = [...Array(leading).fill(null), ...Array.from({ length: totalDays }, (_, i) => addDaysISO(firstDay, i))];
-  const today = todayISO();
 
   return (
     <div className="month-grid">
@@ -341,6 +346,7 @@ function MonthGrid({
             type="button"
             className={`month-cell ${date === today ? 'today' : ''}`}
             style={cellStyle(date)}
+            disabled={date > today}
             onClick={() => onPickDay(date)}
           >
             {Number(date.slice(8, 10))}

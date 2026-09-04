@@ -16,7 +16,7 @@ export function HabitLibrary({ onPick, onBack }: Props) {
         <h1>Habit library</h1>
       </header>
 
-      <p className="subtitle">Tap one to set it up with your own schedule and goal.</p>
+      <p className="subtitle">Tap one to set it up with your own color and goal.</p>
 
       {LIBRARY_CATEGORIES.map((category) => (
         <section key={category} className="library-category">
