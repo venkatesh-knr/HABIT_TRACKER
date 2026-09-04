@@ -132,6 +132,7 @@ fieldset.field legend {
 }
 
 .btn-icon {
+  position: relative;
   font: inherit;
   background: none;
   border: none;
@@ -139,6 +140,14 @@ fieldset.field legend {
   cursor: pointer;
   font-size: 20px;
   padding: 4px 8px;
+}
+
+.btn-icon::after,
+.check::after,
+.count-btn::after {
+  content: '';
+  position: absolute;
+  inset: -9px;
 }
 
 .btn-icon:disabled {
@@ -245,6 +254,7 @@ fieldset.field legend {
 }
 
 .check {
+  position: relative;
   width: 30px;
   height: 30px;
   border-radius: 50%;
@@ -468,6 +478,13 @@ fieldset.field legend {
   opacity: 0.6;
 }
 
+/* Non-colour signal for a completed cell, since colour fill alone isn't
+   reliably distinguishable between habit colours or for colour-blind users. */
+.week-cell.day-completed,
+.month-cell.day-completed {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55);
+}
+
 .year-heatmap {
   display: flex;
   gap: 3px;
@@ -503,6 +520,7 @@ fieldset.field legend {
 }
 
 .count-btn {
+  position: relative;
   width: 26px;
   height: 26px;
   border-radius: 50%;

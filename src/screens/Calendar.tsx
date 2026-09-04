@@ -187,6 +187,24 @@ export function Calendar({ habits, initialHabitId }: Props) {
     return { background: color, opacity: 0.35 + intensity * 0.65 };
   }
 
+  function cellAriaLabel(dateISO: string): string {
+    const state = cellState(dateISO);
+    const dayText = new Date(dateISO + 'T00:00:00').toLocaleDateString(undefined, {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    });
+    if (state === 'out-of-range') {
+      return dateISO > today ? `${dayText}, upcoming` : `${dayText}, before tracking started`;
+    }
+    if (selectedHabit) {
+      return `${dayText}, ${state === 'completed' ? 'completed' : 'not completed'}`;
+    }
+    const completed = dayLogs[dateISO] ?? 0;
+    const existed = existedCountForDate(dateISO);
+    return `${dayText}, ${completed} of ${existed} habit${existed === 1 ? '' : 's'} completed`;
+  }
+
   const headerLabel =
     period === 'day'
       ? formatDayLabel(anchor)
@@ -291,9 +309,10 @@ export function Calendar({ habits, initialHabitId }: Props) {
             <button
               key={date}
               type="button"
-              className={`week-cell ${cellState(date) === 'missed' ? 'day-missed' : ''}`}
+              className={`week-cell day-${cellState(date)}`}
               style={cellStyle(date)}
               disabled={date > today}
+              aria-label={cellAriaLabel(date)}
               onClick={() => {
                 setAnchor(date);
                 setPeriod('day');
@@ -312,12 +331,19 @@ export function Calendar({ habits, initialHabitId }: Props) {
           today={today}
           cellStyle={cellStyle}
           cellState={cellState}
+          cellAriaLabel={cellAriaLabel}
           onPickDay={(date) => { setAnchor(date); setPeriod('day'); }}
         />
       )}
 
       {period === 'year' && !loading && (
-        <YearHeatmap start={range.start} end={range.end} cellStyle={cellStyle} cellState={cellState} />
+        <YearHeatmap
+          start={range.start}
+          end={range.end}
+          cellStyle={cellStyle}
+          cellState={cellState}
+          selectedHabitName={selectedHabit?.name ?? null}
+        />
       )}
 
       {loading && period !== 'day' && <p className="subtitle">Loading…</p>}
@@ -330,12 +356,14 @@ function MonthGrid({
   today,
   cellStyle,
   cellState,
+  cellAriaLabel,
   onPickDay,
 }: {
   anchor: string;
   today: string;
   cellStyle: (date: string) => React.CSSProperties;
   cellState: (date: string) => 'completed' | 'missed' | 'out-of-range';
+  cellAriaLabel: (date: string) => string;
   onPickDay: (date: string) => void;
 }) {
   const d = new Date(anchor + 'T00:00:00');
@@ -358,9 +386,10 @@ function MonthGrid({
           <button
             key={date}
             type="button"
-            className={`month-cell ${date === today ? 'today' : ''} ${cellState(date) === 'missed' ? 'day-missed' : ''}`}
+            className={`month-cell day-${cellState(date)} ${date === today ? 'today' : ''}`}
             style={cellStyle(date)}
             disabled={date > today}
+            aria-label={cellAriaLabel(date)}
             onClick={() => onPickDay(date)}
           >
             {Number(date.slice(8, 10))}
@@ -378,30 +407,39 @@ function YearHeatmap({
   end,
   cellStyle,
   cellState,
+  selectedHabitName,
 }: {
   start: string;
   end: string;
   cellStyle: (date: string) => React.CSSProperties;
   cellState: (date: string) => 'completed' | 'missed' | 'out-of-range';
+  selectedHabitName: string | null;
 }) {
   const columns: string[][] = [];
   let cursor = start;
+  let completedCount = 0;
   while (cursor <= end) {
     const week = Array.from({ length: 7 }, (_, i) => addDaysISO(cursor, i)).filter((d) => d <= end);
+    for (const date of week) {
+      if (cellState(date) === 'completed') completedCount++;
+    }
     columns.push(week);
     cursor = addDaysISO(cursor, 7);
   }
 
+  const summary = `Completion heatmap for ${selectedHabitName ?? 'all habits'} over the last 52 weeks: ${completedCount} day${completedCount === 1 ? '' : 's'} completed.`;
+
   return (
-    <div className="year-heatmap">
+    <div className="year-heatmap" role="img" aria-label={summary}>
       {columns.map((week, wi) => (
         <div key={wi} className="year-heatmap-col">
           {week.map((date) => (
             <div
               key={date}
-              className={`year-heatmap-cell ${cellState(date) === 'missed' ? 'day-missed' : ''}`}
+              className={`year-heatmap-cell day-${cellState(date)}`}
               style={cellStyle(date)}
               title={date}
+              aria-hidden="true"
             />
           ))}
         </div>
