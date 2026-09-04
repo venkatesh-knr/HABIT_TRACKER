@@ -1,32 +1,50 @@
-# React + TypeScript + Vite
+# Ritual
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A simple daily habit tracker — a PWA (installable, works offline-ish) synced across
+devices via Supabase. Check habits off day by day, set optional count-based goals ("8
+glasses", "20 reps"), see streaks, and browse a calendar (day/week/month/year) of what
+you've done.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+React + TypeScript + Vite, [Supabase](https://supabase.com) (Postgres + Auth) for the
+backend, deployed as a static site to GitHub Pages.
 
-## React Compiler
+## Running locally
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Needs two environment variables in a `.env` file at the project root (copy
+`.env.example`):
+
+```
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-or-publishable-key
+```
+
+Both come from your Supabase project's **Settings → API** page. The anon/publishable key
+is meant to be public — the app's security comes entirely from Postgres Row-Level Security,
+not from keeping this key secret.
+
+## Database schema
+
+The full schema — tables, RLS policies, and the streak/summary SQL functions — lives in
+[`supabase/schema.sql`](supabase/schema.sql). It's idempotent: paste the whole file into
+the Supabase dashboard's **SQL Editor** and run it, whether you're setting up a fresh
+project or picking up schema changes made since your last run.
+
+## Known operational note (not a bug)
+
+If the Supabase project sits untouched for 7+ days, it pauses automatically — the app will
+show a connection error rather than silently failing. Your data is untouched; go to the
+Supabase dashboard and click **Resume project**, and everything comes back exactly as it
+was. Nothing to fix in the code for this.
+
+## Project history
+
+`BUILD_INSTRUCTIONS.md` is the original from-scratch build brief (historical — the schema
+it describes is out of date; `supabase/schema.sql` is authoritative). `REVIEW.md` tracks
+what's been reviewed and fixed since.

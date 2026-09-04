@@ -1,13 +1,8 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { useToast } from '../lib/feedback';
+import { useHabitDayLogs } from '../lib/useHabitDayLogs';
 import { daysAgoISO, todayISO } from '../lib/dates';
 import type { Habit, StreakSummary } from '../types';
-
-interface TodayLog {
-  completed: boolean;
-  value: number | null;
-}
 
 interface Props {
   habits: Habit[];
@@ -19,34 +14,21 @@ interface Props {
 const STRIP_DAYS = 7;
 
 export function Today({ habits, onAddHabit, onEditHabit, onViewHistory }: Props) {
-  const [logs, setLogs] = useState<Record<string, TodayLog>>({});
   const [streaks, setStreaks] = useState<Record<string, StreakSummary>>({});
   const [strip, setStrip] = useState<Record<string, Set<string>>>({});
-  const lastConfirmed = useRef<Record<string, TodayLog>>({});
-  const showToast = useToast();
   const today = todayISO();
   const stripDates = Array.from({ length: STRIP_DAYS }, (_, i) => daysAgoISO(STRIP_DAYS - 1 - i));
 
-  const loadTodayLogs = useCallback(async () => {
-    const { data } = await supabase.from('habit_logs').select('habit_id, completed, value').eq('log_date', today);
-    const map: Record<string, TodayLog> = {};
-    for (const row of data ?? []) {
-      map[row.habit_id] = { completed: row.completed, value: row.value };
-    }
-    lastConfirmed.current = map;
-    setLogs(map);
-  }, [today]);
+  const { logs, toggleBoolean: rawToggle, adjustCount: rawAdjust } = useHabitDayLogs(today);
 
   const loadStreaks = useCallback(async () => {
-    const entries = await Promise.all(
-      habits.map(async (h) => {
-        const { data } = await supabase.rpc('get_streak_summary', { p_habit_id: h.id });
-        const row = Array.isArray(data) ? data[0] : data;
-        return [h.id, row ?? { current_streak: 0, longest_streak: 0 }] as const;
-      })
-    );
-    setStreaks(Object.fromEntries(entries));
-  }, [habits]);
+    const { data } = await supabase.rpc('get_all_streak_summaries');
+    const map: Record<string, StreakSummary> = {};
+    for (const row of data ?? []) {
+      map[row.habit_id] = { current_streak: row.current_streak, longest_streak: row.longest_streak };
+    }
+    setStreaks(map);
+  }, []);
 
   const loadStrip = useCallback(async () => {
     const ids = habits.map((h) => h.id);
@@ -69,10 +51,6 @@ export function Today({ habits, onAddHabit, onEditHabit, onViewHistory }: Props)
     setStrip(map);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [habits, today]);
-
-  useEffect(() => {
-    loadTodayLogs();
-  }, [loadTodayLogs]);
 
   useEffect(() => {
     loadStreaks();
@@ -98,47 +76,13 @@ export function Today({ habits, onAddHabit, onEditHabit, onViewHistory }: Props)
   }
 
   async function toggleBoolean(habitId: string) {
-    const nextDone = !(logs[habitId]?.completed ?? false);
-    setLogs((prev) => ({ ...prev, [habitId]: { completed: nextDone, value: null } }));
-    setStripToday(habitId, nextDone);
-
-    const { error } = await supabase
-      .from('habit_logs')
-      .upsert({ habit_id: habitId, log_date: today, completed: nextDone }, { onConflict: 'habit_id,log_date' });
-
-    if (error) {
-      const confirmed = lastConfirmed.current[habitId] ?? { completed: false, value: null };
-      setLogs((prev) => ({ ...prev, [habitId]: confirmed }));
-      setStripToday(habitId, confirmed.completed);
-      showToast(error.message);
-      return;
-    }
-    lastConfirmed.current[habitId] = { completed: nextDone, value: null };
-    refreshStreak(habitId);
+    const ok = await rawToggle(habitId, (entry) => setStripToday(habitId, entry.completed));
+    if (ok) refreshStreak(habitId);
   }
 
   async function adjustCount(habit: Habit, delta: number) {
-    const target = habit.target_value ?? 1;
-    const currentValue = Math.max(0, logs[habit.id]?.value ?? 0);
-    const nextValue = Math.max(0, currentValue + delta);
-    const nextDone = nextValue >= target;
-    setLogs((prev) => ({ ...prev, [habit.id]: { completed: nextDone, value: nextValue } }));
-    setStripToday(habit.id, nextDone);
-
-    const { error } = await supabase.from('habit_logs').upsert(
-      { habit_id: habit.id, log_date: today, value: nextValue, completed: nextDone },
-      { onConflict: 'habit_id,log_date' }
-    );
-
-    if (error) {
-      const confirmed = lastConfirmed.current[habit.id] ?? { completed: false, value: 0 };
-      setLogs((prev) => ({ ...prev, [habit.id]: confirmed }));
-      setStripToday(habit.id, confirmed.completed);
-      showToast(error.message);
-      return;
-    }
-    lastConfirmed.current[habit.id] = { completed: nextDone, value: nextValue };
-    refreshStreak(habit.id);
+    const ok = await rawAdjust(habit, delta, (entry) => setStripToday(habit.id, entry.completed));
+    if (ok) refreshStreak(habit.id);
   }
 
   const doneCount = habits.filter((h) => logs[h.id]?.completed).length;

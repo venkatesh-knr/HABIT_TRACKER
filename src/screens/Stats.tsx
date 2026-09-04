@@ -33,20 +33,17 @@ export function Stats({ habits }: Props) {
       setLoading(true);
       const ids = habits.map((h) => h.id);
 
-      const [{ data: allLogs }, streakEntries] = await Promise.all([
+      const [{ data: allLogs }, { data: streakRows }] = await Promise.all([
         supabase.from('habit_logs').select('habit_id, log_date, completed').in('habit_id', ids),
-        Promise.all(
-          habits.map(async (h) => {
-            const { data } = await supabase.rpc('get_streak_summary', { p_habit_id: h.id });
-            const row = Array.isArray(data) ? data[0] : data;
-            return [h.id, row ?? { current_streak: 0, longest_streak: 0 }] as const;
-          })
-        ),
+        supabase.rpc('get_all_streak_summaries'),
       ]);
 
       if (cancelled) return;
 
-      const streakMap = Object.fromEntries(streakEntries);
+      const streakMap: Record<string, StreakSummary> = {};
+      for (const row of streakRows ?? []) {
+        streakMap[row.habit_id] = { current_streak: row.current_streak, longest_streak: row.longest_streak };
+      }
       const next: Record<string, HabitStat> = {};
       for (const h of habits) {
         const logsForHabit = (allLogs ?? []).filter((l) => l.habit_id === h.id && l.completed);

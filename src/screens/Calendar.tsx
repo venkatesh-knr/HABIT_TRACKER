@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { useToast } from '../lib/feedback';
+import { useHabitDayLogs } from '../lib/useHabitDayLogs';
 import {
   addDaysISO,
   addMonthsISO,
@@ -22,11 +22,6 @@ interface Props {
   initialHabitId?: string | null;
 }
 
-interface DayEntry {
-  completed: boolean;
-  value: number | null;
-}
-
 const YEAR_WEEKS = 52;
 
 export function Calendar({ habits, initialHabitId }: Props) {
@@ -35,11 +30,9 @@ export function Calendar({ habits, initialHabitId }: Props) {
   const [anchor, setAnchor] = useState(todayISO());
   const [dayLogs, setDayLogs] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
-  const showToast = useToast();
 
   // day-view editable state (always covers all habits for the anchor date)
-  const [dayEntries, setDayEntries] = useState<Record<string, DayEntry>>({});
-  const lastConfirmed = useRef<Record<string, DayEntry>>({});
+  const { logs: dayEntries, toggleBoolean, adjustCount } = useHabitDayLogs(anchor);
 
   useEffect(() => {
     if (initialHabitId) {
@@ -98,63 +91,6 @@ export function Calendar({ habits, initialHabitId }: Props) {
       cancelled = true;
     };
   }, [range.start, range.end, selectedHabitId, habits]);
-
-  useEffect(() => {
-    if (period !== 'day') return;
-    let cancelled = false;
-    async function loadDay() {
-      const { data } = await supabase.from('habit_logs').select('habit_id, completed, value').eq('log_date', anchor);
-      if (cancelled) return;
-      const map: Record<string, DayEntry> = {};
-      for (const row of data ?? []) {
-        map[row.habit_id] = { completed: row.completed, value: row.value };
-      }
-      lastConfirmed.current = map;
-      setDayEntries(map);
-    }
-    loadDay();
-    return () => {
-      cancelled = true;
-    };
-  }, [period, anchor]);
-
-  async function toggleBoolean(habitId: string) {
-    const nextDone = !(dayEntries[habitId]?.completed ?? false);
-    setDayEntries((prev) => ({ ...prev, [habitId]: { completed: nextDone, value: null } }));
-
-    const { error } = await supabase
-      .from('habit_logs')
-      .upsert({ habit_id: habitId, log_date: anchor, completed: nextDone }, { onConflict: 'habit_id,log_date' });
-
-    if (error) {
-      const confirmed = lastConfirmed.current[habitId] ?? { completed: false, value: null };
-      setDayEntries((prev) => ({ ...prev, [habitId]: confirmed }));
-      showToast(error.message);
-      return;
-    }
-    lastConfirmed.current[habitId] = { completed: nextDone, value: null };
-  }
-
-  async function adjustCount(habit: Habit, delta: number) {
-    const target = habit.target_value ?? 1;
-    const currentValue = Math.max(0, dayEntries[habit.id]?.value ?? 0);
-    const nextValue = Math.max(0, currentValue + delta);
-    const nextDone = nextValue >= target;
-    setDayEntries((prev) => ({ ...prev, [habit.id]: { completed: nextDone, value: nextValue } }));
-
-    const { error } = await supabase.from('habit_logs').upsert(
-      { habit_id: habit.id, log_date: anchor, value: nextValue, completed: nextDone },
-      { onConflict: 'habit_id,log_date' }
-    );
-
-    if (error) {
-      const confirmed = lastConfirmed.current[habit.id] ?? { completed: false, value: 0 };
-      setDayEntries((prev) => ({ ...prev, [habit.id]: confirmed }));
-      showToast(error.message);
-      return;
-    }
-    lastConfirmed.current[habit.id] = { completed: nextDone, value: nextValue };
-  }
 
   function shiftAnchor(direction: 1 | -1) {
     setAnchor((prev) => {
